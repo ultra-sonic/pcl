@@ -58,6 +58,7 @@ main (int argc, char** argv)
   pcl::PointCloud<pcl::PointXYZ> inputCloud;
   pcl::PointCloud<pcl::PointXYZ> targetCloud;
 
+
   if (pcl::io::loadPCDFile<pcl::PointXYZ> (argv[1], inputCloud) == -1) //* load the file
   {
     PCL_ERROR ("Couldn't read the first .pcd file \n");
@@ -77,7 +78,7 @@ main (int argc, char** argv)
 
   pcl::VoxelGrid<pcl::PointXYZ> sor;
 //  sor.setLeafSize (0.01, 0.01, 0.01);
-  sor.setLeafSize (0.02f, 0.02f, 0.02f);
+  sor.setLeafSize (0.005f, 0.005f, 0.005f);
 //  sor.setLeafSize (0.05, 0.05, 0.05);
 //  sor.setLeafSize (0.1, 0.1, 0.1);
 //  sor.setLeafSize (0.4, 0.4, 0.4);
@@ -98,8 +99,8 @@ main (int argc, char** argv)
 //  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloud.makeShared();
 //  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloud.makeShared();
 
-  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloudFiltered.makeShared();
-  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloudFiltered.makeShared();
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloud.makeShared();
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloud.makeShared();
 
   pcl::PointCloud<pcl::PointXYZ> source_aligned;
 //  /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,12 +118,14 @@ main (int argc, char** argv)
 
   icp.setMaximumIterations(10000);
 
+  icp.setMaxCorrespondenceDistance (0.02);
 //  icp.setMaxCorrespondenceDistance (0.6);
-  icp.setMaxCorrespondenceDistance (0.8);
+//  icp.setMaxCorrespondenceDistance (0.8);
 //  icp.setMaxCorrespondenceDistance (1.5);
 
+  icp.setRANSACOutlierRejectionThreshold (0.02);
 //  icp.setRANSACOutlierRejectionThreshold (0.1);
-  icp.setRANSACOutlierRejectionThreshold (0.6);
+//  icp.setRANSACOutlierRejectionThreshold (0.6);
 //  icp.setRANSACOutlierRejectionThreshold (1.5);
 //  icp.setRANSACOutlierRejectionThreshold (5.0);
 
@@ -135,8 +138,14 @@ main (int argc, char** argv)
   // Start registration process
   icp.align (source_aligned);
 
+  // 18.8cm sphere umfang - 3cm radius
+
   std::cout << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
-  std::cout << icp.getFinalTransformation () << std::endl;
+  Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
+  std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
+            << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
+            << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
+            << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
 //  ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 //  ///////////////////////////////////////////////////////////////////////////////////////////////////
