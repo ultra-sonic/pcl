@@ -109,6 +109,7 @@ loadCloud (const std::string &filename, pcl::PCLPointCloud2 &cloud)
   return (true);
 }
 
+/*
 void
 computeNormals (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
          int k, double radius)
@@ -149,7 +150,7 @@ computeNormals (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 
   toPCLPointCloud2 (normals, output_normals);
   concatenateFields (*input, output_normals, output);
 }
-
+*/
 void
 computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
          double search_radius, bool sqr_gauss_param_set, double sqr_gauss_param,
@@ -192,8 +193,8 @@ computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &out
 
   search::KdTree<PointXYZRGBNormal>::Ptr tree (new search::KdTree<PointXYZRGBNormal> ());
   mls.setSearchMethod (tree);
-//  mls.setComputeNormals (true);
-  mls.setComputeNormals (false);
+  mls.setComputeNormals (true);
+//  mls.setComputeNormals (false);
 
   PCL_INFO ("Computing smoothed surface and normals with search_radius %f , sqr_gaussian_param %f, polynomial fitting %d, polynomial order %d\n",
             mls.getSearchRadius(), mls.getSqrGaussParam(), mls.getPolynomialFit(), mls.getPolynomialOrder());
@@ -259,18 +260,18 @@ main (int argc, char** argv)
   }
 
   // Command line parsing
-  double search_radius = default_search_radius;
-  double sqr_gauss_param = default_sqr_gauss_param;
-  bool sqr_gauss_param_set = true;
-  int polynomial_order = default_polynomial_order;
-  bool use_polynomial_fit = default_use_polynomial_fit;
+  double mls_search_radius = default_search_radius;
+  double mls_sqr_gauss_param = default_sqr_gauss_param;
+  bool mls_sqr_gauss_param_set = true;
+  int mls_polynomial_order = default_polynomial_order;
+  bool mls_use_polynomial_fit = default_use_polynomial_fit;
 
-  parse_argument (argc, argv, "-radius", search_radius);
-  if (parse_argument (argc, argv, "-sqr_gauss_param", sqr_gauss_param) == -1)
-    sqr_gauss_param_set = false;
-  if (parse_argument (argc, argv, "-polynomial_order", polynomial_order) != -1 )
-    use_polynomial_fit = true;
-  parse_argument (argc, argv, "-use_polynomial_fit", use_polynomial_fit);
+  parse_argument (argc, argv, "-mls_radius", mls_search_radius);
+  if (parse_argument (argc, argv, "-mls_sqr_gauss_param", mls_sqr_gauss_param) == -1)
+    mls_sqr_gauss_param_set = false;
+  if (parse_argument (argc, argv, "-mls_polynomial_order", mls_polynomial_order) != -1 )
+    mls_use_polynomial_fit = true;
+  parse_argument (argc, argv, "-mls_use_polynomial_fit", mls_use_polynomial_fit);
 
   pcl::PCLPointCloud2 output[p_file_indices.size()];
   for ( int idx=0;idx<p_file_indices.size();idx++) {
@@ -282,14 +283,14 @@ main (int argc, char** argv)
       // compute normals before MLS
 
       // Command line parsing
-      int k = 40;
-      double radius = 0.1;
+      int reg_k = 40;
+      double reg_radius = 0.1;
       pcl::PCLPointCloud2 output_with_normals;
 ////      pcl::PCLPointCloud2::Ptr output_with_normals (new pcl::PCLPointCloud2);
 //      computeNormals (cloud, output_with_normals, k, radius);
 
       // Do the smoothing
-      computeMLS ( cloud, output[idx], search_radius, sqr_gauss_param_set, sqr_gauss_param, use_polynomial_fit, polynomial_order);
+      computeMLS ( cloud, output[idx], mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
 
       // register to cloud 0
       pcl::PointCloud<pcl::PointXYZRGBNormal> target;
@@ -325,7 +326,7 @@ main (int argc, char** argv)
       pcl::PCLPointCloud2 writePointCloud2;
       pcl::toPCLPointCloud2( source_aligned, writePointCloud2);
       std::stringstream filename;
-      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << search_radius << "_registered.ply";
+      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_registered.ply";
       // Save into the second file
       saveCloud ( filename.str() , writePointCloud2 );
       std::cout << "--------------------------------------------------------" << std::endl;

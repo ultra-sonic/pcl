@@ -99,8 +99,8 @@ main (int argc, char** argv)
 //  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloud.makeShared();
 //  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloud.makeShared();
 
-  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloud.makeShared();
-  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloud.makeShared();
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr source = inputCloudFiltered.makeShared();
+  pcl::PointCloud<pcl::PointXYZ>::ConstPtr target = targetCloudFiltered.makeShared();
 
   pcl::PointCloud<pcl::PointXYZ> source_aligned;
 //  /////////////////////////////////////////////////////////////////////////////////////////////////////
