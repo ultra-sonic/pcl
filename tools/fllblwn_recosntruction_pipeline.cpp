@@ -109,14 +109,14 @@ loadCloud (const std::string &filename, pcl::PCLPointCloud2 &cloud)
   return (true);
 }
 
-/*
+// from normal_estimation.cpp
 void
-computeNormals (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
+computeNormals (const pcl::PCLPointCloud2 &input, pcl::PCLPointCloud2 &output,
          int k, double radius)
 {
   // Convert data to PointCloud<T>
   PointCloud<PointXYZRGB>::Ptr xyz (new PointCloud<PointXYZRGB>);
-  fromPCLPointCloud2 (*input, *xyz);
+  fromPCLPointCloud2 (input, *xyz);
 
   TicToc tt;
   tt.tic ();
@@ -124,22 +124,23 @@ computeNormals (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 
   PointCloud<Normal> normals;
 
   // Try our luck with organized integral image based normal estimation
-  if (xyz->isOrganized ())
-  {
-    IntegralImageNormalEstimation<PointXYZRGB, Normal> ne;
-    ne.setInputCloud (xyz);
-    ne.setNormalEstimationMethod (IntegralImageNormalEstimation<PointXYZRGB, Normal>::COVARIANCE_MATRIX);
-    ne.setNormalSmoothingSize (float (radius));
-    ne.setDepthDependentSmoothing (true);
-    ne.compute (normals);
-  }
-  else
+//  if (xyz->isOrganized ())
+//  {
+//    IntegralImageNormalEstimation<PointXYZRGB, Normal> ne;
+//    ne.setInputCloud (xyz);
+//    ne.setNormalEstimationMethod (IntegralImageNormalEstimation<PointXYZRGB, Normal>::COVARIANCE_MATRIX);
+//    ne.setNormalSmoothingSize (float (radius));
+//    ne.setDepthDependentSmoothing (true);
+//    ne.compute (normals);
+//  }
+//  else
   {
     NormalEstimation<PointXYZRGB, Normal> ne;
     ne.setInputCloud (xyz);
     ne.setSearchMethod (search::KdTree<PointXYZRGB>::Ptr (new search::KdTree<PointXYZRGB>));
     ne.setKSearch (k);
     ne.setRadiusSearch (radius);
+    ne.setViewPoint( 0.0f,0.0f,1.0f );
     ne.compute (normals);
   }
 
@@ -148,11 +149,10 @@ computeNormals (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 
   // Convert data back
   pcl::PCLPointCloud2 output_normals;
   toPCLPointCloud2 (normals, output_normals);
-  concatenateFields (*input, output_normals, output);
+  concatenateFields (input, output_normals, output);
 }
-*/
-void
-computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
+
+void computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
          double search_radius, bool sqr_gauss_param_set, double sqr_gauss_param,
          bool use_polynomial_fit, int polynomial_order)
 {
@@ -183,7 +183,7 @@ computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &out
 
 //  mls.setUpsamplingMethod (MovingLeastSquares<PointXYZ, PointNormal>::SAMPLE_LOCAL_PLANE);
 //  mls.setUpsamplingMethod (MovingLeastSquares<PointXYZ, PointNormal>::RANDOM_UNIFORM_DENSITY);
-//  mls.setUpsamplingMethod (MovingLeastSquares<PointXYZRGB, PointXYZRGBNormal>::VOXEL_GRID_DILATION);
+//  mls.setUpsamplingMethod (MovingLeastSquares<PointXYZRGBNormal, PointXYZRGBNormal>::VOXEL_GRID_DILATION);
   mls.setUpsamplingMethod (MovingLeastSquares<PointXYZRGBNormal, PointXYZRGBNormal>::NONE);
   mls.setPointDensity (60000 * int (search_radius)); // 300 points in a 5 cm radius
   mls.setUpsamplingRadius (0.0025);
@@ -273,6 +273,17 @@ main (int argc, char** argv)
     mls_use_polynomial_fit = true;
   parse_argument (argc, argv, "-mls_use_polynomial_fit", mls_use_polynomial_fit);
 
+  // Command line parsing
+  int normal_est_k = 0;
+  double normal_est_radius = 0.01;
+  parse_argument (argc, argv, "-normal_est_k", normal_est_k);
+  parse_argument (argc, argv, "-normal_est_radius", normal_est_radius);
+
+
+  double icp_corespondance_dist = 0.001;
+  parse_argument (argc, argv, "-icp_corespondance_dist", icp_corespondance_dist);
+
+
   pcl::PCLPointCloud2 output[p_file_indices.size()];
   for ( int idx=0;idx<p_file_indices.size();idx++) {
       // Load the file
@@ -280,22 +291,26 @@ main (int argc, char** argv)
       if (!loadCloud (argv[p_file_indices[ idx ]], *cloud))
         return (-1);
 
-      // compute normals before MLS
 
-      // Command line parsing
-      int reg_k = 40;
-      double reg_radius = 0.1;
-      pcl::PCLPointCloud2 output_with_normals;
-////      pcl::PCLPointCloud2::Ptr output_with_normals (new pcl::PCLPointCloud2);
-//      computeNormals (cloud, output_with_normals, k, radius);
+
 
       // Do the smoothing
-      computeMLS ( cloud, output[idx], mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
+      pcl::PCLPointCloud2 tmpOutput;
+      computeMLS ( cloud, tmpOutput, mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
+
+
+      // compute normals after MLS
+
+      computeNormals ( tmpOutput , output[idx], normal_est_k, normal_est_radius);
 
       // register to cloud 0
       pcl::PointCloud<pcl::PointXYZRGBNormal> target;
       pcl::fromPCLPointCloud2(output[0], target);
       pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pTarget = target.makeShared();
+
+      // TODO: loop over normals and reverse
+      // if ( dot(@N,set(0,0,-1) ) > 0.0 )
+      //    @N*=-1;
 
       pcl::PointCloud<pcl::PointXYZRGBNormal> source_aligned;
       if (idx>0) {
@@ -304,8 +319,8 @@ main (int argc, char** argv)
           pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
           pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
           icp.setMaximumIterations(10000);
-          icp.setMaxCorrespondenceDistance (0.02);
-          icp.setRANSACOutlierRejectionThreshold (0.02);
+          icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
+          icp.setRANSACOutlierRejectionThreshold (0.01); //10mm
           icp.setInputSource ( pSource );
           icp.setInputTarget ( pTarget );
           // Start registration process
@@ -326,7 +341,7 @@ main (int argc, char** argv)
       pcl::PCLPointCloud2 writePointCloud2;
       pcl::toPCLPointCloud2( source_aligned, writePointCloud2);
       std::stringstream filename;
-      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_registered.ply";
+      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_registered.ply";
       // Save into the second file
       saveCloud ( filename.str() , writePointCloud2 );
       std::cout << "--------------------------------------------------------" << std::endl;
