@@ -140,7 +140,7 @@ computeNormals (const pcl::PCLPointCloud2 &input, pcl::PCLPointCloud2 &output,
     ne.setSearchMethod (search::KdTree<PointXYZRGB>::Ptr (new search::KdTree<PointXYZRGB>));
     ne.setKSearch (k);
     ne.setRadiusSearch (radius);
-    ne.setViewPoint( 0.0f,0.0f,1.0f );
+//  ne.setViewPoint( 0.0f,0.0f,1.0f );
     ne.compute (normals);
   }
 
@@ -193,8 +193,8 @@ void computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2
 
   search::KdTree<PointXYZRGBNormal>::Ptr tree (new search::KdTree<PointXYZRGBNormal> ());
   mls.setSearchMethod (tree);
-  mls.setComputeNormals (true);
-//  mls.setComputeNormals (false);
+//  mls.setComputeNormals (true);
+  mls.setComputeNormals (false);
 
   PCL_INFO ("Computing smoothed surface and normals with search_radius %f , sqr_gaussian_param %f, polynomial fitting %d, polynomial order %d\n",
             mls.getSearchRadius(), mls.getSqrGaussParam(), mls.getPolynomialFit(), mls.getPolynomialOrder());
@@ -295,12 +295,14 @@ main (int argc, char** argv)
 
 
       // Do the smoothing
+//      computeMLS ( cloud, output[idx], mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
+
       pcl::PCLPointCloud2 tmpOutput;
       computeMLS ( cloud, tmpOutput, mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
 
+      //TODO: compute normals before MLS - they will be preserved and only XYZ will be smoothed
 
       // compute normals after MLS
-
       computeNormals ( tmpOutput , output[idx], normal_est_k, normal_est_radius);
 
       // register to cloud 0
@@ -308,30 +310,33 @@ main (int argc, char** argv)
       pcl::fromPCLPointCloud2(output[0], target);
       pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pTarget = target.makeShared();
 
-      // TODO: loop over normals and reverse
-      // if ( dot(@N,set(0,0,-1) ) > 0.0 )
-      //    @N*=-1;
-
       pcl::PointCloud<pcl::PointXYZRGBNormal> source_aligned;
-      if (idx>0) {
-          pcl::PointCloud<pcl::PointXYZRGBNormal> source;
-          pcl::fromPCLPointCloud2(output[idx], source);
-          pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
-          pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
-          icp.setMaximumIterations(10000);
-          icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
-          icp.setRANSACOutlierRejectionThreshold (0.01); //10mm
-          icp.setInputSource ( pSource );
-          icp.setInputTarget ( pTarget );
-          // Start registration process
-          icp.align (source_aligned);
+      int registration_enabled=0;
+      if (idx>0 ) {
+          if ( registration_enabled ) {
 
-          std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
-          Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
-          std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
-                    << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
-                    << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
-                    << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
+              pcl::PointCloud<pcl::PointXYZRGBNormal> source;
+              pcl::fromPCLPointCloud2(output[idx], source);
+              pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
+              pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+              icp.setMaximumIterations(10000);
+              icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
+              icp.setRANSACOutlierRejectionThreshold (0.01); //10mm
+              icp.setInputSource ( pSource );
+              icp.setInputTarget ( pTarget );
+              // Start registration process
+              icp.align (source_aligned);
+
+              std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
+              Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
+              std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
+                        << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
+                        << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
+                        << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
+          }
+          else {
+            pcl::fromPCLPointCloud2( output[idx], source_aligned );
+          }
 
       }
       else {
@@ -341,7 +346,7 @@ main (int argc, char** argv)
       pcl::PCLPointCloud2 writePointCloud2;
       pcl::toPCLPointCloud2( source_aligned, writePointCloud2);
       std::stringstream filename;
-      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_registered.ply";
+      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_reg_enabled_" << registration_enabled << ".ply";
       // Save into the second file
       saveCloud ( filename.str() , writePointCloud2 );
       std::cout << "--------------------------------------------------------" << std::endl;
