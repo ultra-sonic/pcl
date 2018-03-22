@@ -48,6 +48,9 @@
 #include <pcl/console/time.h>
 #include <pcl/surface/mls.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/filters/extract_indices.h>
 #include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
 
@@ -152,14 +155,14 @@ computeNormals (const pcl::PCLPointCloud2 &input, pcl::PCLPointCloud2 &output,
   concatenateFields (input, output_normals, output);
 }
 
-void computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
+void computeMLS (const pcl::PCLPointCloud2 &input, pcl::PCLPointCloud2 &output,
          double search_radius, bool sqr_gauss_param_set, double sqr_gauss_param,
          bool use_polynomial_fit, int polynomial_order)
 {
 
   PointCloud<PointXYZRGBNormal>::Ptr xyz_cloud_pre (new pcl::PointCloud<PointXYZRGBNormal> ()),
       xyz_cloud (new pcl::PointCloud<PointXYZRGBNormal> ());
-  fromPCLPointCloud2 (*input, *xyz_cloud_pre);
+  fromPCLPointCloud2 (input, *xyz_cloud_pre);
 
   // Filter the NaNs from the cloud
   for (size_t i = 0; i < xyz_cloud_pre->size (); ++i)
@@ -221,6 +224,87 @@ void computeMLS (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2
 //}
 
 void
+removeOutliers (const pcl::PCLPointCloud2::ConstPtr &input, pcl::PCLPointCloud2 &output,
+         std::string method,
+         int min_pts, double radius,
+         int mean_k, double std_dev_mul, bool negative, bool keep_organized)
+{
+
+  PointCloud<PointXYZ>::Ptr xyz_cloud_pre (new pcl::PointCloud<PointXYZ> ()),
+                            xyz_cloud (new pcl::PointCloud<PointXYZ> ());
+  fromPCLPointCloud2 (*input, *xyz_cloud_pre);
+
+  pcl::PointIndices::Ptr removed_indices (new PointIndices),
+                         indices (new PointIndices);
+  std::vector<int> valid_indices;
+  if (keep_organized)
+  {
+    xyz_cloud = xyz_cloud_pre;
+    for (int i = 0; i < int (xyz_cloud->size ()); ++i)
+      valid_indices.push_back (i);
+  }
+  else
+    removeNaNFromPointCloud<PointXYZ> (*xyz_cloud_pre, *xyz_cloud, valid_indices);
+
+  TicToc tt;
+  tt.tic ();
+  PointCloud<PointXYZ>::Ptr xyz_cloud_filtered (new PointCloud<PointXYZ> ());
+  if (method == "statistical")
+  {
+    StatisticalOutlierRemoval<PointXYZ> filter (true);
+    filter.setInputCloud (xyz_cloud);
+    filter.setMeanK (mean_k);
+    filter.setStddevMulThresh (std_dev_mul);
+    filter.setNegative (negative);
+    filter.setKeepOrganized (keep_organized);
+    PCL_INFO ("Computing filtered cloud from %lu points with mean_k %d, std_dev_mul %f, inliers %d ...", xyz_cloud->size (), filter.getMeanK (), filter.getStddevMulThresh (), filter.getNegative ());
+    filter.filter (*xyz_cloud_filtered);
+    // Get the indices that have been explicitly removed
+    filter.getRemovedIndices (*removed_indices);
+  }
+  else if (method == "radius")
+  {
+    RadiusOutlierRemoval<PointXYZ> filter (true);
+    filter.setInputCloud (xyz_cloud);
+    filter.setRadiusSearch (radius);
+    filter.setMinNeighborsInRadius (min_pts);
+    filter.setNegative (negative);
+    filter.setKeepOrganized (keep_organized);
+    PCL_INFO ("Computing filtered cloud from %lu points with radius %f, min_pts %d ...", xyz_cloud->size (), radius, min_pts);
+    filter.filter (*xyz_cloud_filtered);
+    // Get the indices that have been explicitly removed
+    filter.getRemovedIndices (*removed_indices);
+  }
+  else
+  {
+    PCL_ERROR ("%s is not a valid filter name! Quitting!\n", method.c_str ());
+    return;
+  }
+
+  print_info ("[done, "); print_value ("%g", tt.toc ()); print_info (" ms : "); print_value ("%d", xyz_cloud_filtered->width * xyz_cloud_filtered->height); print_info (" points, %lu indices removed]\n", removed_indices->indices.size ());
+
+  if (keep_organized)
+  {
+    pcl::PCLPointCloud2 output_filtered;
+    toPCLPointCloud2 (*xyz_cloud_filtered, output_filtered);
+    concatenateFields (*input, output_filtered, output);
+  }
+  else
+  {
+    // Make sure we are addressing values in the original index vector
+    for (size_t i = 0; i < removed_indices->indices.size (); ++i)
+      indices->indices.push_back (valid_indices[removed_indices->indices[i]]);
+
+    // Extract the indices of the remaining points
+    pcl::ExtractIndices<pcl::PCLPointCloud2> ei;
+    ei.setInputCloud (input);
+    ei.setIndices (indices);
+    ei.setNegative (true);
+    ei.filter (output);
+  }
+}
+
+void
 saveCloud (const std::string &filename, const pcl::PCLPointCloud2 &cloud )
 {
   bool binary=false;
@@ -259,7 +343,7 @@ main (int argc, char** argv)
     return (-1);
   }
 
-  // Command line parsing
+  // Command line parsing MLS
   double mls_search_radius = default_search_radius;
   double mls_sqr_gauss_param = default_sqr_gauss_param;
   bool mls_sqr_gauss_param_set = true;
@@ -273,15 +357,33 @@ main (int argc, char** argv)
     mls_use_polynomial_fit = true;
   parse_argument (argc, argv, "-mls_use_polynomial_fit", mls_use_polynomial_fit);
 
-  // Command line parsing
+  // Command line parsing Normals
   int normal_est_k = 0;
   double normal_est_radius = 0.01;
   parse_argument (argc, argv, "-normal_est_k", normal_est_k);
   parse_argument (argc, argv, "-normal_est_radius", normal_est_radius);
 
 
+  // Command line parsing ICP
   double icp_corespondance_dist = 0.001;
   parse_argument (argc, argv, "-icp_corespondance_dist", icp_corespondance_dist);
+
+  // Command line parsing Outlier Removal
+  std::string method = "radius";
+  int min_pts = 100;
+  double radius = 0.0125;
+  int mean_k = 150;  // 100 might be ok too
+  double std_dev_mul = 0.0;
+  int negative = 0;
+
+
+  parse_argument (argc, argv, "-method", method);
+  parse_argument (argc, argv, "-radius", radius);
+  parse_argument (argc, argv, "-min_pts", min_pts);
+  parse_argument (argc, argv, "-mean_k", mean_k);
+  parse_argument (argc, argv, "-std_dev_mul", std_dev_mul);
+  parse_argument (argc, argv, "-negative", negative);
+  bool keep_organized = find_switch (argc, argv, "-keep_organized");
 
 
   pcl::PCLPointCloud2 output[p_file_indices.size()];
@@ -292,18 +394,21 @@ main (int argc, char** argv)
         return (-1);
 
 
-
-
       // Do the smoothing
-//      computeMLS ( cloud, output[idx], mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
+      pcl::PCLPointCloud2 tmpOutputWithoutOutliers;
+      removeOutliers( cloud, tmpOutputWithoutOutliers, method, min_pts, radius, mean_k, std_dev_mul, negative, keep_organized);
 
-      pcl::PCLPointCloud2 tmpOutput;
-      computeMLS ( cloud, tmpOutput, mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
+
+
+      pcl::PCLPointCloud2 tmpOutputMLS;
+      computeMLS ( tmpOutputWithoutOutliers, tmpOutputMLS, mls_search_radius, mls_sqr_gauss_param_set, mls_sqr_gauss_param, mls_use_polynomial_fit, mls_polynomial_order);
 
       //TODO: compute normals before MLS - they will be preserved and only XYZ will be smoothed
 
       // compute normals after MLS
-      computeNormals ( tmpOutput , output[idx], normal_est_k, normal_est_radius);
+      computeNormals ( tmpOutputMLS , output[idx], normal_est_k, normal_est_radius);
+//      computeNormals ( tmpOutputWithoutOutliers , output[idx], normal_est_k, normal_est_radius);
+
 
       // register to cloud 0
       pcl::PointCloud<pcl::PointXYZRGBNormal> target;
@@ -346,7 +451,7 @@ main (int argc, char** argv)
       pcl::PCLPointCloud2 writePointCloud2;
       pcl::toPCLPointCloud2( source_aligned, writePointCloud2);
       std::stringstream filename;
-      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_reg_enabled_" << registration_enabled << ".ply";
+      filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_reg_enabled_" << registration_enabled << "_outliersRemoved.ply";
       // Save into the second file
       saveCloud ( filename.str() , writePointCloud2 );
       std::cout << "--------------------------------------------------------" << std::endl;
