@@ -53,6 +53,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 
 using namespace pcl;
@@ -408,6 +409,48 @@ main (int argc, char** argv)
       // compute normals after MLS
       computeNormals ( tmpOutputMLS , output[idx], normal_est_k, normal_est_radius);
 //      computeNormals ( tmpOutputWithoutOutliers , output[idx], normal_est_k, normal_est_radius);
+
+
+      // Detect the largest plane and remove it from the sets
+      pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
+      pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
+
+      // segmentation
+      pcl::PointCloud<pcl::PointXYZRGBNormal> segSource;
+      pcl::fromPCLPointCloud2(output[idx], segSource);
+      pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSegSource = segSource.makeShared();
+
+      // Create the segmentation object
+      pcl::SACSegmentation<pcl::PointXYZRGBNormal> seg;
+      // Optional
+      seg.setOptimizeCoefficients (true);
+      // Mandatory
+      // sphere segmentation
+//        seg.setModelType(SACMODEL_SPHERE);
+      seg.setModelType(SACMODEL_SPHERE);
+        seg.setMethodType(SAC_RANSAC);
+//        seg.setNormalDistanceWeight( 0.1f );
+        seg.setMaxIterations( 10000 );
+        seg.setDistanceThreshold( 0.001f );
+        //seg.setRadiusLimits(0.0195f, 0.0205f);
+        seg.setRadiusLimits(0.016f, 0.017f);
+        //seg.setInputCloud(cloudPtr);
+        seg.setInputCloud (pSegSource);
+        //seg.setInputNormals(cloudNormals);
+        seg.segment(*inliers,*coefficients);
+
+      if (inliers->indices.size () == 0)
+      {
+        PCL_INFO ("Could not find inliers for sphere in the given dataset.");
+      }
+//      for (int sphereIdx=0; sphereIdx<inliers->indices.size ();sphereIdx++)
+            std::cout << coefficients->values.size() << std::endl;
+            std::cout << coefficients->values[0] << std::endl;
+            std::cout << coefficients->values[1] << std::endl;
+            std::cout << coefficients->values[2] << std::endl;
+            std::cout << coefficients->values[3] << std::endl;
+//      }
+
 
 
       // register to cloud 0

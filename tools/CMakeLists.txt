@@ -88,7 +88,7 @@ if (BUILD_tools)
   target_link_libraries (pcl_mls_smoothing pcl_common pcl_io pcl_surface pcl_filters)
 
   PCL_ADD_EXECUTABLE (fllblwn_recosntruction_pipeline "${SUBSYS_NAME}" fllblwn_recosntruction_pipeline.cpp)
-  target_link_libraries (fllblwn_recosntruction_pipeline pcl_common pcl_io pcl_surface pcl_filters pcl_common pcl_io pcl_features pcl_kdtree)
+  target_link_libraries (fllblwn_recosntruction_pipeline pcl_common pcl_io pcl_surface pcl_filters pcl_common pcl_io pcl_features pcl_kdtree pcl_segmentation)
   
   PCL_ADD_EXECUTABLE (pcl_marching_cubes_reconstruction "${SUBSYS_NAME}" marching_cubes_reconstruction.cpp)
   target_link_libraries (pcl_marching_cubes_reconstruction pcl_common pcl_io pcl_surface)
