@@ -441,6 +441,7 @@ main (int argc, char** argv)
         //seg.setInputNormals(cloudNormals);
         seg.segment(*inliers,*coefficients);
 
+      // loop here as long as we have inliers and remove them from the PC after each iteration
       if (inliers->indices.size () == 0)
       {
         PCL_INFO ("Could not find inliers for sphere in the given dataset.");
