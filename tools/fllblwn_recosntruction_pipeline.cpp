@@ -426,22 +426,28 @@ main (int argc, char** argv)
       seg.setOptimizeCoefficients (true);
       // Mandatory
       // sphere segmentation
-//        seg.setModelType(SACMODEL_SPHERE);
-      seg.setModelType(SACMODEL_SPHERE);
+        seg.setModelType(SACMODEL_SPHERE);
+//      seg.setModelType(SACMODEL_NORMAL_SPHERE); <<<< TODO MAKE THIS WORK
         seg.setMethodType(SAC_RANSAC);
-//        seg.setNormalDistanceWeight( 0.1f );
-        seg.setMaxIterations( 10000 );
-        seg.setDistanceThreshold( 0.001f );
+        seg.setMaxIterations( 1000000 );
+        seg.setDistanceThreshold( 0.005f );
         //seg.setRadiusLimits(0.0195f, 0.0205f);
-        seg.setRadiusLimits(0.016f, 0.017f);
+        seg.setRadiusLimits(0.0155f, 0.0175f);
         //seg.setInputCloud(cloudPtr);
         seg.setInputCloud (pSegSource);
+        //seg.setSamplesMaxDist();
+//        seg.setNormalDistanceWeight( 0.1f );
+        seg.setEpsAngle(15 / (180/3.141592654));
         //seg.setInputNormals(cloudNormals);
         seg.segment(*inliers,*coefficients);
 
       if (inliers->indices.size () == 0)
       {
         PCL_INFO ("Could not find inliers for sphere in the given dataset.");
+      }
+      else {
+          PCL_INFO ("FOUND INLIERS: ");
+          std::cout << inliers->indices.size () << std::endl;
       }
 //      for (int sphereIdx=0; sphereIdx<inliers->indices.size ();sphereIdx++)
             std::cout << coefficients->values.size() << std::endl;
