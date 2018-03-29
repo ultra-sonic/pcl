@@ -448,9 +448,9 @@ main (int argc, char** argv)
       seg.setModelType(SACMODEL_NORMAL_SPHERE); //
       seg.setMethodType(SAC_RANSAC);
       seg.setMaxIterations( 1000000 );
-      seg.setDistanceThreshold( 0.005f );
+      seg.setDistanceThreshold( 0.007f );
       //seg.setRadiusLimits(0.0195f, 0.0205f);
-      seg.setRadiusLimits(0.0155f, 0.0175f);
+      seg.setRadiusLimits(0.0155f, 0.021f);
       //seg.setSamplesMaxDist();
       seg.setNormalDistanceWeight( 0.01f );
       //seg.setEpsAngle(15 / (180/3.141592654));
