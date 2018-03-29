@@ -416,47 +416,92 @@ main (int argc, char** argv)
       pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
 
       // segmentation
-      pcl::PointCloud<pcl::PointXYZRGBNormal> segSource;
-      pcl::fromPCLPointCloud2(output[idx], segSource);
-      pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSegSource = segSource.makeShared();
+      pcl::PointCloud<pcl::PointXYZRGBNormal> segSourcePointXYZRGBNormal;
+      pcl::fromPCLPointCloud2(output[idx], segSourcePointXYZRGBNormal);
+      pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSegSource = segSourcePointXYZRGBNormal.makeShared();
+
+      //extrac Normals
+      pcl::PointCloud<pcl::PointXYZ> segSourceXYZ;
+      pcl::PointCloud<pcl::Normal> segSourceNormals;
+      segSourceXYZ.points.resize(segSourcePointXYZRGBNormal.size());
+      segSourceNormals.points.resize(segSourcePointXYZRGBNormal.size());
+      for (size_t i = 0; i < segSourcePointXYZRGBNormal.points.size(); i++) {
+          //XYZ
+          segSourceXYZ.points[i].x = segSourcePointXYZRGBNormal.points[i].x;
+          segSourceXYZ.points[i].y = segSourcePointXYZRGBNormal.points[i].y;
+          segSourceXYZ.points[i].z = segSourcePointXYZRGBNormal.points[i].z;
+          //
+          segSourceNormals.points[i].normal_x = segSourcePointXYZRGBNormal.points[i].normal_x;
+          segSourceNormals.points[i].normal_y = segSourcePointXYZRGBNormal.points[i].normal_y;
+          segSourceNormals.points[i].normal_z = segSourcePointXYZRGBNormal.points[i].normal_z;
+      }
+      pcl::PointCloud<pcl::PointXYZ>::ConstPtr pSegSourceXYZ = segSourceXYZ.makeShared();
+      pcl::PointCloud<pcl::Normal>::ConstPtr pSegSourceNormals = segSourceNormals.makeShared();
 
       // Create the segmentation object
-      pcl::SACSegmentation<pcl::PointXYZRGBNormal> seg;
+      pcl::SACSegmentationFromNormals<pcl::PointXYZ, pcl::Normal> seg;
       // Optional
       seg.setOptimizeCoefficients (true);
       // Mandatory
       // sphere segmentation
-        seg.setModelType(SACMODEL_SPHERE);
-//      seg.setModelType(SACMODEL_NORMAL_SPHERE); <<<< TODO MAKE THIS WORK
-        seg.setMethodType(SAC_RANSAC);
-        seg.setMaxIterations( 1000000 );
-        seg.setDistanceThreshold( 0.005f );
-        //seg.setRadiusLimits(0.0195f, 0.0205f);
-        seg.setRadiusLimits(0.0155f, 0.0175f);
-        //seg.setInputCloud(cloudPtr);
-        seg.setInputCloud (pSegSource);
-        //seg.setSamplesMaxDist();
-//        seg.setNormalDistanceWeight( 0.1f );
-        seg.setEpsAngle(15 / (180/3.141592654));
-        //seg.setInputNormals(cloudNormals);
+//        seg.setModelType(SACMODEL_SPHERE);
+      seg.setModelType(SACMODEL_NORMAL_SPHERE); //
+      seg.setMethodType(SAC_RANSAC);
+      seg.setMaxIterations( 1000000 );
+      seg.setDistanceThreshold( 0.005f );
+      //seg.setRadiusLimits(0.0195f, 0.0205f);
+      seg.setRadiusLimits(0.0155f, 0.0175f);
+      //seg.setSamplesMaxDist();
+      seg.setNormalDistanceWeight( 0.01f );
+      //seg.setEpsAngle(15 / (180/3.141592654));
+
+      seg.setInputCloud (pSegSourceXYZ);
+      seg.setInputNormals(pSegSourceNormals );
+
+      bool inliersFound=true;
+
+      //will be used inside the while loop
+      pcl::ExtractIndices<pcl::PointXYZ> extractXYZ;
+      pcl::ExtractIndices<pcl::Normal> extractNormals;
+
+      while (inliersFound) {
         seg.segment(*inliers,*coefficients);
 
-      // loop here as long as we have inliers and remove them from the PC after each iteration
-      if (inliers->indices.size () == 0)
-      {
+        // loop here as long as we have inliers and remove them from the PC after each iteration
+        if (inliers->indices.size () == 0)
+        {
         PCL_INFO ("Could not find inliers for sphere in the given dataset.");
-      }
-      else {
+        inliersFound=false;
+        }
+        else {
           PCL_INFO ("FOUND INLIERS: ");
           std::cout << inliers->indices.size () << std::endl;
+
+          extractXYZ.setInputCloud (pSegSourceXYZ);
+          extractXYZ.setIndices (inliers);
+          extractXYZ.setNegative (true);
+          extractNormals.setInputCloud (pSegSourceNormals);
+          extractNormals.setIndices (inliers);
+          extractNormals.setNegative (true);
+
+          extractXYZ.filter( segSourceXYZ );
+          extractNormals.filter( segSourceNormals );
+
+          // update pointers to newly filtered pointclouds
+          pSegSourceXYZ = segSourceXYZ.makeShared();
+          pSegSourceNormals = segSourceNormals.makeShared();
+
+          seg.setInputCloud(pSegSourceXYZ);
+          seg.setInputNormals(pSegSourceNormals);
+
+        }
+        std::cout << coefficients->values.size() << std::endl;
+        std::cout << coefficients->values[0] << std::endl;
+        std::cout << coefficients->values[1] << std::endl;
+        std::cout << coefficients->values[2] << std::endl;
+        std::cout << coefficients->values[3] << std::endl;
+
       }
-//      for (int sphereIdx=0; sphereIdx<inliers->indices.size ();sphereIdx++)
-            std::cout << coefficients->values.size() << std::endl;
-            std::cout << coefficients->values[0] << std::endl;
-            std::cout << coefficients->values[1] << std::endl;
-            std::cout << coefficients->values[2] << std::endl;
-            std::cout << coefficients->values[3] << std::endl;
-//      }
 
 
 
