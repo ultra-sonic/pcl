@@ -371,9 +371,9 @@ main (int argc, char** argv)
 
   // Command line parsing Outlier Removal
   std::string method = "radius";
-  int min_pts = 100;
+  int min_pts = 100; // 100; // min points need in radius to keep point
   double radius = 0.0125;
-  int mean_k = 150;  // 100 might be ok too
+  int mean_k = 150;  // 100 might be ok too - not used in radius method
   double std_dev_mul = 0.0;
   int negative = 0;
 
@@ -397,6 +397,7 @@ main (int argc, char** argv)
 
       // Do the smoothing
       pcl::PCLPointCloud2 tmpOutputWithoutOutliers;
+      min_pts=10;
       removeOutliers( cloud, tmpOutputWithoutOutliers, method, min_pts, radius, mean_k, std_dev_mul, negative, keep_organized);
 
 
@@ -447,12 +448,13 @@ main (int argc, char** argv)
 //        seg.setModelType(SACMODEL_SPHERE);
       seg.setModelType(SACMODEL_NORMAL_SPHERE); //
       seg.setMethodType(SAC_RANSAC);
-      seg.setMaxIterations( 1000000 );
-      seg.setDistanceThreshold( 0.007f );
+      seg.setMaxIterations( 100000000 );
+      seg.setDistanceThreshold( 0.0055f );
       //seg.setRadiusLimits(0.0195f, 0.0205f);
-      seg.setRadiusLimits(0.0155f, 0.021f);
+      seg.setRadiusLimits(0.0165f, 0.020f);
       //seg.setSamplesMaxDist();
-      seg.setNormalDistanceWeight( 0.01f );
+      seg.setNormalDistanceWeight( 0.005 );
+//      seg.setNormalDistanceWeight( 0.5f * (3.141592654/180) );
       //seg.setEpsAngle(15 / (180/3.141592654));
 
       seg.setInputCloud (pSegSourceXYZ);
@@ -464,18 +466,20 @@ main (int argc, char** argv)
       pcl::ExtractIndices<pcl::PointXYZ> extractXYZ;
       pcl::ExtractIndices<pcl::Normal> extractNormals;
 
+      int sphereNum=0;
+
       while (inliersFound) {
         seg.segment(*inliers,*coefficients);
 
         // loop here as long as we have inliers and remove them from the PC after each iteration
         if (inliers->indices.size () == 0)
         {
-        PCL_INFO ("Could not find inliers for sphere in the given dataset.");
+        std::cout   << "Could not find inliers for sphere " << sphereNum << " in the given dataset.\n";
         inliersFound=false;
         }
         else {
-          PCL_INFO ("FOUND INLIERS: ");
-          std::cout << inliers->indices.size () << std::endl;
+//          PCL_INFO ("FOUND INLIERS: ");
+//          std::cout << inliers->indices.size () << std::endl;
 
           extractXYZ.setInputCloud (pSegSourceXYZ);
           extractXYZ.setIndices (inliers);
@@ -495,12 +499,16 @@ main (int argc, char** argv)
           seg.setInputNormals(pSegSourceNormals);
 
         }
-        std::cout << coefficients->values.size() << std::endl;
-        std::cout << coefficients->values[0] << std::endl;
-        std::cout << coefficients->values[1] << std::endl;
-        std::cout << coefficients->values[2] << std::endl;
-        std::cout << coefficients->values[3] << std::endl;
+        std::cout   << coefficients->values[0] << " "
+                    << coefficients->values[1] << " "
+                    << coefficients->values[2] << " "
+                    << coefficients->values[3] << " # "
+                    << "sphere" << sphereNum << " ("<<inliers->indices.size()<<" inliers):\\"
+                    << std::endl;
 
+        // NEXT UP >>> TransformationEstimationSVD
+
+        sphereNum++;
       }
 
 
