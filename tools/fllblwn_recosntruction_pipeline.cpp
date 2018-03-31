@@ -466,6 +466,18 @@ main (int argc, char** argv)
       pcl::ExtractIndices<pcl::PointXYZ> extractXYZ;
       pcl::ExtractIndices<pcl::Normal> extractNormals;
 
+      // these 3 clouds will be filled with our sphere centroids and be used for registration later
+      // code from here: https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
+      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud[3] ;
+      for (int cloudIdx=0;cloudIdx<3;cloudIdx++) {
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmpPtr (new pcl::PointCloud<pcl::PointXYZ> ());
+        pointCloud[cloudIdx]=tmpPtr;
+//      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud2 (new pcl::PointCloud<pcl::PointXYZ> ());
+        pointCloud[cloudIdx]->width = 3;
+        pointCloud[cloudIdx]->height = 1;
+        pointCloud[cloudIdx]->is_dense = false;
+      }
+
       int sphereNum=0;
 
       while (inliersFound) {
