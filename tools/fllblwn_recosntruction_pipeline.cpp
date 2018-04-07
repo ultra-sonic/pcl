@@ -47,11 +47,13 @@
 #include <pcl/console/parse.h>
 #include <pcl/console/time.h>
 #include <pcl/surface/mls.h>
+#include <pcl/common/geometry.h> // distance
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/transformation_estimation_3point.h>
 #include <pcl/registration/icp_nl.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
@@ -64,6 +66,24 @@ int default_polynomial_order = 2;
 bool default_use_polynomial_fit = false;
 double default_search_radius = 0.0,
     default_sqr_gauss_param = 0.0;
+
+bool sortPointByX(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) {
+        if (p1.x < p2.x) {
+                return true;
+        }
+        else {
+                return false;
+        }
+}
+
+bool sortPointByXreversed(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) {
+        if (p1.x < p2.x) {
+                return false;
+        }
+        else {
+                return true;
+        }
+}
 
 
 void
@@ -388,6 +408,20 @@ main (int argc, char** argv)
 
 
   pcl::PCLPointCloud2 output[p_file_indices.size()];
+
+  // these 3 clouds will be filled with our sphere centroids and be used for registration later
+  // code from here: https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
+  pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud[3] ;
+  for (int cloudIdx=0;cloudIdx<3;cloudIdx++) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tmpPtr (new pcl::PointCloud<pcl::PointXYZ> ());
+//      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud2 (new pcl::PointCloud<pcl::PointXYZ> ());
+    pointCloud[cloudIdx]=tmpPtr;
+    pointCloud[cloudIdx]->width = 3;
+    pointCloud[cloudIdx]->height = 1;
+    pointCloud[cloudIdx]->is_dense = false;
+    pointCloud[cloudIdx]->resize(pointCloud[cloudIdx]->width * pointCloud[cloudIdx]->height);
+  }
+
   for ( int idx=0;idx<p_file_indices.size();idx++) {
       // Load the file
       pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2);
@@ -466,18 +500,6 @@ main (int argc, char** argv)
       pcl::ExtractIndices<pcl::PointXYZ> extractXYZ;
       pcl::ExtractIndices<pcl::Normal> extractNormals;
 
-      // these 3 clouds will be filled with our sphere centroids and be used for registration later
-      // code from here: https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
-      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud[3] ;
-      for (int cloudIdx=0;cloudIdx<3;cloudIdx++) {
-        pcl::PointCloud<pcl::PointXYZ>::Ptr tmpPtr (new pcl::PointCloud<pcl::PointXYZ> ());
-        pointCloud[cloudIdx]=tmpPtr;
-//      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud2 (new pcl::PointCloud<pcl::PointXYZ> ());
-        pointCloud[cloudIdx]->width = 3;
-        pointCloud[cloudIdx]->height = 1;
-        pointCloud[cloudIdx]->is_dense = false;
-      }
-
       int sphereNum=0;
 
       while (inliersFound) {
@@ -493,24 +515,33 @@ main (int argc, char** argv)
 //          PCL_INFO ("FOUND INLIERS: ");
 //          std::cout << inliers->indices.size () << std::endl;
 
-          extractXYZ.setInputCloud (pSegSourceXYZ);
-          extractXYZ.setIndices (inliers);
-          extractXYZ.setNegative (true);
-          extractNormals.setInputCloud (pSegSourceNormals);
-          extractNormals.setIndices (inliers);
-          extractNormals.setNegative (true);
+            extractXYZ.setInputCloud (pSegSourceXYZ);
+            extractXYZ.setIndices (inliers);
+            extractXYZ.setNegative (true);
+            extractNormals.setInputCloud (pSegSourceNormals);
+            extractNormals.setIndices (inliers);
+            extractNormals.setNegative (true);
 
-          extractXYZ.filter( segSourceXYZ );
-          extractNormals.filter( segSourceNormals );
+            extractXYZ.filter( segSourceXYZ );
+            extractNormals.filter( segSourceNormals );
 
-          // update pointers to newly filtered pointclouds
-          pSegSourceXYZ = segSourceXYZ.makeShared();
-          pSegSourceNormals = segSourceNormals.makeShared();
+            // update pointers to newly filtered pointclouds
+            pSegSourceXYZ = segSourceXYZ.makeShared();
+            pSegSourceNormals = segSourceNormals.makeShared();
 
-          seg.setInputCloud(pSegSourceXYZ);
-          seg.setInputNormals(pSegSourceNormals);
+            seg.setInputCloud(pSegSourceXYZ);
+            seg.setInputNormals(pSegSourceNormals);
+
+
 
         }
+
+        if (sphereNum<3) {
+            pointCloud[idx]->points[sphereNum].x = coefficients->values[0];
+            pointCloud[idx]->points[sphereNum].y = coefficients->values[1];
+            pointCloud[idx]->points[sphereNum].z = coefficients->values[2];
+            }
+
         std::cout   << coefficients->values[0] << " "
                     << coefficients->values[1] << " "
                     << coefficients->values[2] << " "
@@ -518,10 +549,18 @@ main (int argc, char** argv)
                     << "sphere" << sphereNum << " ("<<inliers->indices.size()<<" inliers):\\"
                     << std::endl;
 
-        // NEXT UP >>> TransformationEstimationSVD
+
 
         sphereNum++;
       }
+
+      if (idx==0) { // sort cloud 0 by X - for correspondence grouping later - found out manually
+          std::sort(pointCloud[idx]->points.begin(), pointCloud[idx]->points.end(), sortPointByX);
+      }
+      else { // sort cloud 1 & 2 by X reversed
+          std::sort(pointCloud[idx]->points.begin(), pointCloud[idx]->points.end(), sortPointByXreversed);
+      }
+
 
 
 
@@ -530,41 +569,122 @@ main (int argc, char** argv)
       pcl::fromPCLPointCloud2(output[0], target);
       pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pTarget = target.makeShared();
 
-      pcl::PointCloud<pcl::PointXYZRGBNormal> source_aligned;
-      int registration_enabled=0;
+      pcl::PointCloud<pcl::PointXYZ> source_aligned;
+      pcl::PointCloud<pcl::PointXYZRGBNormal> outputAligned;
+      int registration_enabled=true;
       if (idx>0 ) {
           if ( registration_enabled ) {
 
-              pcl::PointCloud<pcl::PointXYZRGBNormal> source;
-              pcl::fromPCLPointCloud2(output[idx], source);
-              pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
-              pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
-              icp.setMaximumIterations(10000);
-              icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
-              icp.setRANSACOutlierRejectionThreshold (0.01); //10mm
-              icp.setInputSource ( pSource );
-              icp.setInputTarget ( pTarget );
-              // Start registration process
-              icp.align (source_aligned);
+////              pcl::PointCloud<pcl::PointXYZRGBNormal> source;
+////              pcl::fromPCLPointCloud2(output[idx], source);
+////              pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
+//              // pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+//              pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+//              icp.setMaximumIterations(1000000);
+//              icp_corespondance_dist=0.01;
+//              icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
+//              icp.setRANSACOutlierRejectionThreshold (1.0); //10mm
+//              icp.setInputSource (pointCloud[idx]); // ( pSource );
+//              icp.setInputTarget (pointCloud[0]);//( pTarget );
+//              // Start registration process
+//              icp.align (source_aligned);
 
-              std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
-              Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
-              std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
-                        << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
-                        << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
-                        << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
+//              std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
+//              Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
+//              std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
+//                        << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
+//                        << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
+//                        << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
+
+              //MOVE 1st point of cloud[idx] to first point of cloud[0]
+
+              /* Reminder: how transformation matrices work :
+
+                       |-------> This column is the translation
+                | 1 0 0 x |  \
+                | 0 1 0 y |   }-> The identity 3x3 matrix (no rotation) on the left
+                | 0 0 1 z |  /
+                | 0 0 0 1 |    -> We do not use this line (and it has to stay 0,0,0,1)
+
+                METHOD #1: Using a Matrix4f
+                This is the "manual" method, perfect to understand but error prone !
+              */
+//              Eigen::Matrix4f transform_1 = Eigen::Matrix4f::Identity();
+
+//              transform_1 (3) = pointCloud[idx]->points[0].x - pointCloud[0]->points[0].x;
+//              transform_1 (7) = pointCloud[idx]->points[0].y - pointCloud[0]->points[0].y;
+//              transform_1 (11) = pointCloud[idx]->points[0].z - pointCloud[0]->points[0].z;
+
+              Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+              transform_2.translation() <<  pointCloud[idx]->points[0].x - pointCloud[0]->points[0].x,
+                                            pointCloud[idx]->points[0].y - pointCloud[0]->points[0].y,
+                                            pointCloud[idx]->points[0].z - pointCloud[0]->points[0].z;
+              // Executing the transformation
+              pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
+              // You can either apply transform_1 or transform_2; they are the same
+              pcl::transformPointCloud (*pointCloud[idx], *transformed_cloud, transform_2);
+
+
+
+                // https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
+                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ> TESVD;
+                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
+                TESVD.estimateRigidTransformation (*pointCloud[0],*transformed_cloud,transformation2);
+
+//                pcl::Correspondence corr0 (0,0,1);pcl::Correspondence corr1 (1,1,1);pcl::Correspondence corr2 (2,2,1);
+                boost::shared_ptr<pcl::Correspondences> correspondences (new pcl::Correspondences);
+//                pcl::registration::CorrespondenceEstimation<PointXYZ, PointXYZ> corr_est;
+//                corr_est.setInputSource (pointCloud[0]);
+//                corr_est.setInputTarget (pointCloud[idx]);
+//                corr_est.determineCorrespondences(*correspondences);
+
+
+
+
+                correspondences->push_back( pcl::Correspondence(0,0, pcl::geometry::distance(pointCloud[0]->points[0],transformed_cloud->points[0]) ) );
+                correspondences->push_back( pcl::Correspondence(1,1, pcl::geometry::distance(pointCloud[0]->points[1],transformed_cloud->points[1]) ) );
+                correspondences->push_back( pcl::Correspondence(2,2, pcl::geometry::distance(pointCloud[0]->points[2],transformed_cloud->points[2]) ) );
+
+//                pcl::registration::TransformationEstimation3Point<pcl::PointXYZ,pcl::PointXYZ> TE3P;
+//                pcl::registration::TransformationEstimation3Point<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
+//                TE3P.estimateRigidTransformation (*pointCloud[0],*pointCloud[idx],*correspondences,transformation2);
+//                TE3P.estimateRigidTransformation (*pointCloud[0],*transformed_cloud,*correspondences,transformation2);
+
+
+                for (int debugIdx=0;debugIdx<3;debugIdx++)
+                    std::cout << pointCloud[idx]->points[debugIdx].x << " X " << pointCloud[0]->points[debugIdx].x << std::endl <<
+                                 pointCloud[idx]->points[debugIdx].y << " Y " << pointCloud[0]->points[debugIdx].y << std::endl <<
+                                 pointCloud[idx]->points[debugIdx].z << " Z " << pointCloud[0]->points[debugIdx].z << std::endl;
+
+//                std::cout << "The Estimated Rotation and translation matrices (using getTransformation function) are : \n" << std::endl;
+//                printf ("\n");
+//                printf ("    | %6.3f %6.3f %6.3f | \n", transformation2 (0,0), transformation2 (0,1), transformation2 (0,2));
+//                printf ("R = | %6.3f %6.3f %6.3f | \n", transformation2 (1,0), transformation2 (1,1), transformation2 (1,2));
+//                printf ("    | %6.3f %6.3f %6.3f | \n", transformation2 (2,0), transformation2 (2,1), transformation2 (2,2));
+//                printf ("\n");
+//                printf ("t = < %0.3f, %0.3f, %0.3f >\n", transformation2 (0,3), transformation2 (1,3), transformation2 (2,3));
+//                printf ("\n");
+//                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (0,0), transformation2 (0,1), transformation2 (0,2), transformation2 (0,3));
+//                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (1,0), transformation2 (1,1), transformation2 (1,2), transformation2 (1,3));
+//                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (2,0), transformation2 (2,1), transformation2 (2,2), transformation2 (2,3));
+//                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (3,0), transformation2 (3,1), transformation2 (3,2), transformation2 (3,3));
+                  std::cout << transformation2(0)  << "," << transformation2(1)  << "," << transformation2(2)  << "," << transformation2(3) << "," << std::endl
+                            << transformation2(4)  << "," << transformation2(5)  << "," << transformation2(6)  << "," << transformation2(7) << "," << std::endl
+                            << transformation2(8)  << "," << transformation2(9)  << "," << transformation2(10) << "," << transformation2(11) << "," << std::endl
+                            << transformation2(12) << "," << transformation2(13) << "," << transformation2(14) << "," << transformation2(15) << std::endl;
+              pcl::fromPCLPointCloud2( output[idx], outputAligned );
           }
           else {
-            pcl::fromPCLPointCloud2( output[idx], source_aligned );
+            pcl::fromPCLPointCloud2( output[idx], outputAligned );
           }
 
       }
       else {
-          source_aligned=target;
+          outputAligned=target;
       }
 
       pcl::PCLPointCloud2 writePointCloud2;
-      pcl::toPCLPointCloud2( source_aligned, writePointCloud2);
+      pcl::toPCLPointCloud2( outputAligned, writePointCloud2);
       std::stringstream filename;
       filename << argv[p_file_indices[ idx ]] << "_mls_radius_" << mls_search_radius << "_polyfit_" << mls_use_polynomial_fit*mls_polynomial_order << "_normal_est_" << normal_est_k << "_" << normal_est_radius  << "_icp_cd_" << icp_corespondance_dist << "_reg_enabled_" << registration_enabled << "_outliersRemoved.ply";
       // Save into the second file
