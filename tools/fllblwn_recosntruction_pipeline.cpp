@@ -85,6 +85,15 @@ bool sortPointByXreversed(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) {
         }
 }
 
+bool sortPointByZ(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) {
+        if (p1.z < p2.z) {
+                return true;
+        }
+        else {
+                return false;
+        }
+}
+
 
 void
 printHelp (int, char **argv)
@@ -411,15 +420,18 @@ main (int argc, char** argv)
 
   // these 3 clouds will be filled with our sphere centroids and be used for registration later
   // code from here: https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
-  pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud[3] ;
+
+#define SPHERES_NEEDED 6
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr regPointCloud[3] ;
   for (int cloudIdx=0;cloudIdx<3;cloudIdx++) {
     pcl::PointCloud<pcl::PointXYZ>::Ptr tmpPtr (new pcl::PointCloud<pcl::PointXYZ> ());
 //      pcl::PointCloud<pcl::PointXYZ>::Ptr pointCloud2 (new pcl::PointCloud<pcl::PointXYZ> ());
-    pointCloud[cloudIdx]=tmpPtr;
-    pointCloud[cloudIdx]->width = 3;
-    pointCloud[cloudIdx]->height = 1;
-    pointCloud[cloudIdx]->is_dense = false;
-    pointCloud[cloudIdx]->resize(pointCloud[cloudIdx]->width * pointCloud[cloudIdx]->height);
+    regPointCloud[cloudIdx]=tmpPtr;
+    regPointCloud[cloudIdx]->width = SPHERES_NEEDED;
+    regPointCloud[cloudIdx]->height = 1;
+    regPointCloud[cloudIdx]->is_dense = false;
+    regPointCloud[cloudIdx]->resize(regPointCloud[cloudIdx]->width * regPointCloud[cloudIdx]->height);
   }
 
   for ( int idx=0;idx<p_file_indices.size();idx++) {
@@ -536,10 +548,10 @@ main (int argc, char** argv)
 
         }
 
-        if (sphereNum<3) {
-            pointCloud[idx]->points[sphereNum].x = coefficients->values[0];
-            pointCloud[idx]->points[sphereNum].y = coefficients->values[1];
-            pointCloud[idx]->points[sphereNum].z = coefficients->values[2];
+        if (sphereNum<SPHERES_NEEDED) {
+            regPointCloud[idx]->points[sphereNum].x = coefficients->values[0];
+            regPointCloud[idx]->points[sphereNum].y = coefficients->values[1];
+            regPointCloud[idx]->points[sphereNum].z = coefficients->values[2];
             }
 
         std::cout   << coefficients->values[0] << " "
@@ -555,10 +567,10 @@ main (int argc, char** argv)
       }
 
       if (idx==0) { // sort cloud 0 by X - for correspondence grouping later - found out manually
-          std::sort(pointCloud[idx]->points.begin(), pointCloud[idx]->points.end(), sortPointByX);
+          std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByZ);
       }
       else { // sort cloud 1 & 2 by X reversed
-          std::sort(pointCloud[idx]->points.begin(), pointCloud[idx]->points.end(), sortPointByXreversed);
+          std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByX);
       }
 
 
@@ -615,21 +627,16 @@ main (int argc, char** argv)
 //              transform_1 (7) = pointCloud[idx]->points[0].y - pointCloud[0]->points[0].y;
 //              transform_1 (11) = pointCloud[idx]->points[0].z - pointCloud[0]->points[0].z;
 
-              Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
-              transform_2.translation() <<  pointCloud[idx]->points[0].x - pointCloud[0]->points[0].x,
-                                            pointCloud[idx]->points[0].y - pointCloud[0]->points[0].y,
-                                            pointCloud[idx]->points[0].z - pointCloud[0]->points[0].z;
-              // Executing the transformation
-              pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
-              // You can either apply transform_1 or transform_2; they are the same
-              pcl::transformPointCloud (*pointCloud[idx], *transformed_cloud, transform_2);
+//              Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+//              transform_2.translation() <<  regPointCloud[idx]->points[0].x - regPointCloud[0]->points[0].x,
+//                                            regPointCloud[idx]->points[0].y - regPointCloud[0]->points[0].y,
+//                                            regPointCloud[idx]->points[0].z - regPointCloud[0]->points[0].z;
+//              // Executing the transformation
+//              pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
+//              // You can either apply transform_1 or transform_2; they are the same
+//              pcl::transformPointCloud (*regPointCloud[idx], *transformed_cloud, transform_2);
 
 
-
-                // https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
-                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ> TESVD;
-                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
-                TESVD.estimateRigidTransformation (*pointCloud[0],*transformed_cloud,transformation2);
 
 //                pcl::Correspondence corr0 (0,0,1);pcl::Correspondence corr1 (1,1,1);pcl::Correspondence corr2 (2,2,1);
                 boost::shared_ptr<pcl::Correspondences> correspondences (new pcl::Correspondences);
@@ -637,13 +644,20 @@ main (int argc, char** argv)
 //                corr_est.setInputSource (pointCloud[0]);
 //                corr_est.setInputTarget (pointCloud[idx]);
 //                corr_est.determineCorrespondences(*correspondences);
+                correspondences->push_back( pcl::Correspondence(0,0, pcl::geometry::distance(regPointCloud[idx]->points[0],regPointCloud[0]->points[0]) ) );
+                correspondences->push_back( pcl::Correspondence(2,1, pcl::geometry::distance(regPointCloud[idx]->points[1],regPointCloud[0]->points[2]) ) );
+                correspondences->push_back( pcl::Correspondence(1,2, pcl::geometry::distance(regPointCloud[idx]->points[2],regPointCloud[0]->points[1]) ) );
+                correspondences->push_back( pcl::Correspondence(3,4, pcl::geometry::distance(regPointCloud[idx]->points[3],regPointCloud[0]->points[4]) ) );
+                correspondences->push_back( pcl::Correspondence(4,3, pcl::geometry::distance(regPointCloud[idx]->points[4],regPointCloud[0]->points[3]) ) );
+                correspondences->push_back( pcl::Correspondence(5,5, pcl::geometry::distance(regPointCloud[idx]->points[5],regPointCloud[0]->points[5]) ) );
 
 
+                // https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
+                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ> TESVD;
+                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
+                TESVD.estimateRigidTransformation (*regPointCloud[idx],*regPointCloud[0],*correspondences,transformation2);
+//                TESVD.estimateRigidTransformation (*regPointCloud[idx],*regPointCloud[0],transformation2);
 
-
-                correspondences->push_back( pcl::Correspondence(0,0, pcl::geometry::distance(pointCloud[0]->points[0],transformed_cloud->points[0]) ) );
-                correspondences->push_back( pcl::Correspondence(1,1, pcl::geometry::distance(pointCloud[0]->points[1],transformed_cloud->points[1]) ) );
-                correspondences->push_back( pcl::Correspondence(2,2, pcl::geometry::distance(pointCloud[0]->points[2],transformed_cloud->points[2]) ) );
 
 //                pcl::registration::TransformationEstimation3Point<pcl::PointXYZ,pcl::PointXYZ> TE3P;
 //                pcl::registration::TransformationEstimation3Point<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
@@ -651,10 +665,16 @@ main (int argc, char** argv)
 //                TE3P.estimateRigidTransformation (*pointCloud[0],*transformed_cloud,*correspondences,transformation2);
 
 
-                for (int debugIdx=0;debugIdx<3;debugIdx++)
-                    std::cout << pointCloud[idx]->points[debugIdx].x << " X " << pointCloud[0]->points[debugIdx].x << std::endl <<
-                                 pointCloud[idx]->points[debugIdx].y << " Y " << pointCloud[0]->points[debugIdx].y << std::endl <<
-                                 pointCloud[idx]->points[debugIdx].z << " Z " << pointCloud[0]->points[debugIdx].z << std::endl;
+                for (int debugIdx=0;debugIdx<SPHERES_NEEDED;debugIdx++) {
+//                    std::cout << regPointCloud[idx]->points[debugIdx].x << " X " << regPointCloud[0]->points[debugIdx].x << std::endl <<
+//                                 regPointCloud[idx]->points[debugIdx].y << " Y " << regPointCloud[0]->points[debugIdx].y << std::endl <<
+//                                 regPointCloud[idx]->points[debugIdx].z << " Z " << regPointCloud[0]->points[debugIdx].z << std::endl;
+
+                    printf ("%6.3f %6.3f \n", regPointCloud[idx]->points[debugIdx].x, regPointCloud[0]->points[debugIdx].x );
+                    printf ("%6.3f %6.3f \n", regPointCloud[idx]->points[debugIdx].y, regPointCloud[0]->points[debugIdx].y );
+                    printf ("%6.3f %6.3f \n", regPointCloud[idx]->points[debugIdx].z, regPointCloud[0]->points[debugIdx].z );
+                    printf ("\n");
+                }
 
 //                std::cout << "The Estimated Rotation and translation matrices (using getTransformation function) are : \n" << std::endl;
 //                printf ("\n");
