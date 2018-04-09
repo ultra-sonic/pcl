@@ -463,27 +463,27 @@ main (int argc, char** argv)
       pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
 
       // segmentation
-      pcl::PointCloud<pcl::PointXYZRGBNormal> segSourcePointXYZRGBNormal;
-      pcl::fromPCLPointCloud2(output[idx], segSourcePointXYZRGBNormal);
-      pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSegSource = segSourcePointXYZRGBNormal.makeShared();
+      pcl::PointCloud<pcl::PointXYZRGBNormal> ranSourcePointXYZRGBNormal;
+      pcl::fromPCLPointCloud2(output[idx], ranSourcePointXYZRGBNormal);
+      pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSegSource = ranSourcePointXYZRGBNormal.makeShared();
 
       //extrac Normals
-      pcl::PointCloud<pcl::PointXYZ> segSourceXYZ;
-      pcl::PointCloud<pcl::Normal> segSourceNormals;
-      segSourceXYZ.points.resize(segSourcePointXYZRGBNormal.size());
-      segSourceNormals.points.resize(segSourcePointXYZRGBNormal.size());
-      for (size_t i = 0; i < segSourcePointXYZRGBNormal.points.size(); i++) {
+      pcl::PointCloud<pcl::PointXYZ> ransacSourceXYZ;
+      pcl::PointCloud<pcl::Normal> ransacSourceNormals;
+      ransacSourceXYZ.points.resize(ranSourcePointXYZRGBNormal.size());
+      ransacSourceNormals.points.resize(ranSourcePointXYZRGBNormal.size());
+      for (size_t i = 0; i < ranSourcePointXYZRGBNormal.points.size(); i++) {
           //XYZ
-          segSourceXYZ.points[i].x = segSourcePointXYZRGBNormal.points[i].x;
-          segSourceXYZ.points[i].y = segSourcePointXYZRGBNormal.points[i].y;
-          segSourceXYZ.points[i].z = segSourcePointXYZRGBNormal.points[i].z;
+          ransacSourceXYZ.points[i].x = ranSourcePointXYZRGBNormal.points[i].x;
+          ransacSourceXYZ.points[i].y = ranSourcePointXYZRGBNormal.points[i].y;
+          ransacSourceXYZ.points[i].z = ranSourcePointXYZRGBNormal.points[i].z;
           //
-          segSourceNormals.points[i].normal_x = segSourcePointXYZRGBNormal.points[i].normal_x;
-          segSourceNormals.points[i].normal_y = segSourcePointXYZRGBNormal.points[i].normal_y;
-          segSourceNormals.points[i].normal_z = segSourcePointXYZRGBNormal.points[i].normal_z;
+          ransacSourceNormals.points[i].normal_x = ranSourcePointXYZRGBNormal.points[i].normal_x;
+          ransacSourceNormals.points[i].normal_y = ranSourcePointXYZRGBNormal.points[i].normal_y;
+          ransacSourceNormals.points[i].normal_z = ranSourcePointXYZRGBNormal.points[i].normal_z;
       }
-      pcl::PointCloud<pcl::PointXYZ>::ConstPtr pSegSourceXYZ = segSourceXYZ.makeShared();
-      pcl::PointCloud<pcl::Normal>::ConstPtr pSegSourceNormals = segSourceNormals.makeShared();
+      pcl::PointCloud<pcl::PointXYZ>::ConstPtr pRanscaSourceXYZ = ransacSourceXYZ.makeShared();
+      pcl::PointCloud<pcl::Normal>::ConstPtr pRansacSourceNormals = ransacSourceNormals.makeShared();
 
       // Create the segmentation object
       pcl::SACSegmentationFromNormals<pcl::PointXYZ, pcl::Normal> seg;
@@ -503,8 +503,8 @@ main (int argc, char** argv)
 //      seg.setNormalDistanceWeight( 0.5f * (3.141592654/180) );
       //seg.setEpsAngle(15 / (180/3.141592654));
 
-      seg.setInputCloud (pSegSourceXYZ);
-      seg.setInputNormals(pSegSourceNormals );
+      seg.setInputCloud (pRanscaSourceXYZ);
+      seg.setInputNormals(pRansacSourceNormals );
 
       bool inliersFound=true;
 
@@ -527,22 +527,22 @@ main (int argc, char** argv)
 //          PCL_INFO ("FOUND INLIERS: ");
 //          std::cout << inliers->indices.size () << std::endl;
 
-            extractXYZ.setInputCloud (pSegSourceXYZ);
+            extractXYZ.setInputCloud (pRanscaSourceXYZ);
             extractXYZ.setIndices (inliers);
             extractXYZ.setNegative (true);
-            extractNormals.setInputCloud (pSegSourceNormals);
+            extractNormals.setInputCloud (pRansacSourceNormals);
             extractNormals.setIndices (inliers);
             extractNormals.setNegative (true);
 
-            extractXYZ.filter( segSourceXYZ );
-            extractNormals.filter( segSourceNormals );
+            extractXYZ.filter( ransacSourceXYZ );
+            extractNormals.filter( ransacSourceNormals );
 
             // update pointers to newly filtered pointclouds
-            pSegSourceXYZ = segSourceXYZ.makeShared();
-            pSegSourceNormals = segSourceNormals.makeShared();
+            pRanscaSourceXYZ = ransacSourceXYZ.makeShared();
+            pRansacSourceNormals = ransacSourceNormals.makeShared();
 
-            seg.setInputCloud(pSegSourceXYZ);
-            seg.setInputNormals(pSegSourceNormals);
+            seg.setInputCloud(pRanscaSourceXYZ);
+            seg.setInputNormals(pRansacSourceNormals);
 
 
 
@@ -581,32 +581,13 @@ main (int argc, char** argv)
       pcl::fromPCLPointCloud2(output[0], target);
       pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pTarget = target.makeShared();
 
-      pcl::PointCloud<pcl::PointXYZ> source_aligned;
+      pcl::PointCloud<pcl::PointXYZRGBNormal> source_aligned;
       pcl::PointCloud<pcl::PointXYZRGBNormal> outputAligned;
       int registration_enabled=true;
       if (idx>0 ) {
           if ( registration_enabled ) {
 
-////              pcl::PointCloud<pcl::PointXYZRGBNormal> source;
-////              pcl::fromPCLPointCloud2(output[idx], source);
-////              pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pSource = source.makeShared();
-//              // pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
-//              pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-//              icp.setMaximumIterations(1000000);
-//              icp_corespondance_dist=0.01;
-//              icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
-//              icp.setRANSACOutlierRejectionThreshold (1.0); //10mm
-//              icp.setInputSource (pointCloud[idx]); // ( pSource );
-//              icp.setInputTarget (pointCloud[0]);//( pTarget );
-//              // Start registration process
-//              icp.align (source_aligned);
 
-//              std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
-//              Eigen::Matrix<float, 4, 4> final=icp.getFinalTransformation ();
-//              std::cout << final(0)  << "," << final(1)  << "," << final(2)  << "," << final(3) << "," << std::endl
-//                        << final(4)  << "," << final(5)  << "," << final(6)  << "," << final(7) << "," << std::endl
-//                        << final(8)  << "," << final(9)  << "," << final(10) << "," << final(11) << "," << std::endl
-//                        << final(12) << "," << final(13) << "," << final(14) << "," << final(15) << std::endl;
 
               //MOVE 1st point of cloud[idx] to first point of cloud[0]
 
@@ -631,10 +612,7 @@ main (int argc, char** argv)
 //              transform_2.translation() <<  regPointCloud[idx]->points[0].x - regPointCloud[0]->points[0].x,
 //                                            regPointCloud[idx]->points[0].y - regPointCloud[0]->points[0].y,
 //                                            regPointCloud[idx]->points[0].z - regPointCloud[0]->points[0].z;
-//              // Executing the transformation
-//              pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ> ());
-//              // You can either apply transform_1 or transform_2; they are the same
-//              pcl::transformPointCloud (*regPointCloud[idx], *transformed_cloud, transform_2);
+
 
 
 
@@ -654,8 +632,8 @@ main (int argc, char** argv)
 
                 // https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
                 pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ> TESVD;
-                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 transformation2;
-                TESVD.estimateRigidTransformation (*regPointCloud[idx],*regPointCloud[0],*correspondences,transformation2);
+                pcl::registration::TransformationEstimationSVD<pcl::PointXYZ,pcl::PointXYZ>::Matrix4 rigidTransformSVD;
+                TESVD.estimateRigidTransformation (*regPointCloud[idx],*regPointCloud[0],*correspondences,rigidTransformSVD);
 //                TESVD.estimateRigidTransformation (*regPointCloud[idx],*regPointCloud[0],transformation2);
 
 
@@ -688,11 +666,46 @@ main (int argc, char** argv)
 //                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (1,0), transformation2 (1,1), transformation2 (1,2), transformation2 (1,3));
 //                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (2,0), transformation2 (2,1), transformation2 (2,2), transformation2 (2,3));
 //                printf ("%6.3f %6.3f %6.3f %6.3f  \n", transformation2 (3,0), transformation2 (3,1), transformation2 (3,2), transformation2 (3,3));
-                  std::cout << transformation2(0)  << "," << transformation2(1)  << "," << transformation2(2)  << "," << transformation2(3) << "," << std::endl
-                            << transformation2(4)  << "," << transformation2(5)  << "," << transformation2(6)  << "," << transformation2(7) << "," << std::endl
-                            << transformation2(8)  << "," << transformation2(9)  << "," << transformation2(10) << "," << transformation2(11) << "," << std::endl
-                            << transformation2(12) << "," << transformation2(13) << "," << transformation2(14) << "," << transformation2(15) << std::endl;
-              pcl::fromPCLPointCloud2( output[idx], outputAligned );
+                  std::cout << rigidTransformSVD(0)  << "," << rigidTransformSVD(1)  << "," << rigidTransformSVD(2)  << "," << rigidTransformSVD(3) << "," << std::endl
+                            << rigidTransformSVD(4)  << "," << rigidTransformSVD(5)  << "," << rigidTransformSVD(6)  << "," << rigidTransformSVD(7) << "," << std::endl
+                            << rigidTransformSVD(8)  << "," << rigidTransformSVD(9)  << "," << rigidTransformSVD(10) << "," << rigidTransformSVD(11) << "," << std::endl
+                            << rigidTransformSVD(12) << "," << rigidTransformSVD(13) << "," << rigidTransformSVD(14) << "," << rigidTransformSVD(15) << std::endl;
+
+
+
+                  // apply trasnsform before ICP
+                  pcl::PointCloud<pcl::PointXYZRGBNormal> icpSource, icpTarget;
+                  pcl::fromPCLPointCloud2(output[idx], icpSource);
+                  pcl::fromPCLPointCloud2(output[0], icpTarget);
+                  pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr icpSourceRigidTransformed (new pcl::PointCloud<pcl::PointXYZRGBNormal> ());
+                  pcl::transformPointCloud ( icpSource, *icpSourceRigidTransformed, rigidTransformSVD );
+
+                    pcl::PointCloud<pcl::PointXYZRGBNormal>::ConstPtr pIcpTarget = icpTarget.makeShared();
+                    // pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+                    pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+                    icp.setMaximumIterations(1000000);
+                    icp_corespondance_dist=0.01;
+                    icp.setMaxCorrespondenceDistance ( icp_corespondance_dist ); //1mm
+                    icp.setRANSACOutlierRejectionThreshold (1.0); //10mm
+                    icp.setInputSource ( icpSourceRigidTransformed ); // ( pSource );
+                    icp.setInputTarget ( pIcpTarget );//( pTarget );
+                    // Start registration process
+                    icp.align (outputAligned);
+
+                    std::cout << argv[p_file_indices[ idx ]] << "has converged:" << icp.hasConverged () << " score: " << icp.getFitnessScore () << std::endl;
+                    Eigen::Matrix<float, 4, 4> finalIcpTransform=icp.getFinalTransformation ();
+                    std::cout << finalIcpTransform(0)  << "," << finalIcpTransform(1)  << "," << finalIcpTransform(2)  << "," << finalIcpTransform(3) << "," << std::endl
+                              << finalIcpTransform(4)  << "," << finalIcpTransform(5)  << "," << finalIcpTransform(6)  << "," << finalIcpTransform(7) << "," << std::endl
+                              << finalIcpTransform(8)  << "," << finalIcpTransform(9)  << "," << finalIcpTransform(10) << "," << finalIcpTransform(11) << "," << std::endl
+                              << finalIcpTransform(12) << "," << finalIcpTransform(13) << "," << finalIcpTransform(14) << "," << finalIcpTransform(15) << std::endl;
+
+              //pcl::fromPCLPointCloud2( output[idx], outputAligned );
+
+
+
+
+
+
           }
           else {
             pcl::fromPCLPointCloud2( output[idx], outputAligned );
