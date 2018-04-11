@@ -398,6 +398,21 @@ main (int argc, char** argv)
   double icp_corespondance_dist = 0.001;
   parse_argument (argc, argv, "-icp_corespondance_dist", icp_corespondance_dist);
 
+  // cms line ransac
+  int sac_max_iterations=10000000;
+  float sac_distance_threshold=0.0055,
+        sac_min_radius=0.0165,
+        sac_max_radius=0.02,
+        sac_normal_distance_weight=0.005;
+ 
+  parse_argument (argc, argv, "-sac_distance_threshold", sac_distance_threshold );
+  parse_argument (argc, argv, "-sac_max_iterations", sac_max_iterations );
+  parse_argument (argc, argv, "-sac_min_radius", sac_min_radius );
+  parse_argument (argc, argv, "-sac_max_radius", sac_max_radius );
+  parse_argument (argc, argv, "-sac_normal_distance_weight", sac_normal_distance_weight );
+
+
+ 
   // Command line parsing Outlier Removal
   std::string method = "radius";
   int min_pts = 100; // 100; // min points need in radius to keep point
@@ -494,14 +509,16 @@ main (int argc, char** argv)
 //        seg.setModelType(SACMODEL_SPHERE);
       seg.setModelType(SACMODEL_NORMAL_SPHERE); //
       seg.setMethodType(SAC_RANSAC);
-      seg.setMaxIterations( 100000000 );
-      seg.setDistanceThreshold( 0.0055f );
+      seg.setMaxIterations( sac_max_iterations );
+      seg.setDistanceThreshold( sac_distance_threshold );
       //seg.setRadiusLimits(0.0195f, 0.0205f);
-      seg.setRadiusLimits(0.0165f, 0.020f);
+      seg.setRadiusLimits( sac_min_radius, sac_max_radius );
       //seg.setSamplesMaxDist();
-      seg.setNormalDistanceWeight( 0.005 );
+      seg.setNormalDistanceWeight( sac_normal_distance_weight );
 //      seg.setNormalDistanceWeight( 0.5f * (3.141592654/180) );
       //seg.setEpsAngle(15 / (180/3.141592654));
+
+      std::cout << sac_distance_threshold << " - " << sac_min_radius << " - " << sac_max_radius << " - " << sac_normal_distance_weight << std::endl;
 
       seg.setInputCloud (pRanscaSourceXYZ);
       seg.setInputNormals(pRansacSourceNormals );
