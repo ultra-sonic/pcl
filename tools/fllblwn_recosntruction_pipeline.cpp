@@ -594,19 +594,33 @@ main (int argc, char** argv)
 
                     }
 
+
+
                     if (sphereNum<SPHERES_NEEDED) {
                         regPointCloud[idx]->points[sphereNum].x = coefficients->values[0];
                         regPointCloud[idx]->points[sphereNum].y = coefficients->values[1];
                         regPointCloud[idx]->points[sphereNum].z = coefficients->values[2];
 
-                        std::cout   << coefficients->values[0] << " "
-                                    << coefficients->values[1] << " "
-                                    << coefficients->values[2] << " "
-                                    << coefficients->values[3] << " # "
-                                    << "sphere" << sphereNum << " ("<<inliers->indices.size()<<" inliers):\\"
-                                    << std::endl;
-                        sphereNum++;
+                        // test if we are too close to an existing sphere: if yes then do not increment sphereNum and go on
+                        bool tooClose=false;
+                        for (int prevSphereIdx=0;prevSphereIdx<sphereNum;prevSphereIdx++) {
+                            if ( pcl::geometry::distance(regPointCloud[idx]->points[sphereNum],regPointCloud[idx]->points[prevSphereIdx]) < sac_max_radius ) {
+                                tooClose=true;
+                            }
                         }
+                        if (tooClose) {
+                            std::cout << "sphere too close" << std::endl;
+                        }
+                        else {
+                            std::cout   << coefficients->values[0] << " "
+                                        << coefficients->values[1] << " "
+                                        << coefficients->values[2] << " "
+                                        << coefficients->values[3] << " # "
+                                        << "sphere" << sphereNum << " ("<<inliers->indices.size()<<" inliers):\\"
+                                        << std::endl;
+                            sphereNum++;
+                        }
+                    }
                     if (sphereNum==SPHERES_NEEDED) {
                         std::cout << "found all spheres" << std::endl;
                         foundAllSpheres=true;
@@ -616,18 +630,18 @@ main (int argc, char** argv)
             }
           }
 
-          if (idx==0) { // sort cloud 0 by X - for correspondence grouping later - found out manually
-              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByZ);
-              std::cout << "sorting by Z" << std::endl;
-          }
-          if (idx==1) { // sort cloud 1 & 2 by X
-              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByY);
-              std::cout << "sorting by Y" << std::endl;
-          }
-          if (idx==2) { // sort cloud 1 & 2 by X reversed
-              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByX);
-              std::cout << "sorting by X" << std::endl;
-          }
+//          if (idx==0) { // sort cloud 0 by X - for correspondence grouping later - found out manually
+//              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByZ);
+//              std::cout << "sorting by Z" << std::endl;
+//          }
+//          if (idx==1) { // sort cloud 1 & 2 by X
+//              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByY);
+//              std::cout << "sorting by Y" << std::endl;
+//          }
+//          if (idx==2) { // sort cloud 1 & 2 by X reversed
+//              std::sort(regPointCloud[idx]->points.begin(), regPointCloud[idx]->points.end(), sortPointByX);
+//              std::cout << "sorting by X" << std::endl;
+//          }
       }
 
 
@@ -678,21 +692,21 @@ main (int argc, char** argv)
     //                corr_est.setInputTarget (pointCloud[idx]);
     //                corr_est.determineCorrespondences(*correspondences);
                     if (idx==1) {
-                        correspondences->push_back( pcl::Correspondence(5,0, pcl::geometry::distance(regPointCloud[idx]->points[0],regPointCloud[0]->points[5]) ) );
-                        correspondences->push_back( pcl::Correspondence(3,1, pcl::geometry::distance(regPointCloud[idx]->points[1],regPointCloud[0]->points[3]) ) );
-                        correspondences->push_back( pcl::Correspondence(4,2, pcl::geometry::distance(regPointCloud[idx]->points[2],regPointCloud[0]->points[4]) ) );
-                        correspondences->push_back( pcl::Correspondence(1,3, pcl::geometry::distance(regPointCloud[idx]->points[3],regPointCloud[0]->points[1]) ) );
-                        correspondences->push_back( pcl::Correspondence(2,4, pcl::geometry::distance(regPointCloud[idx]->points[4],regPointCloud[0]->points[2]) ) );
-                        correspondences->push_back( pcl::Correspondence(0,5, pcl::geometry::distance(regPointCloud[idx]->points[5],regPointCloud[0]->points[0]) ) );
+                        correspondences->push_back( pcl::Correspondence(5,1, pcl::geometry::distance(regPointCloud[idx]->points[5],regPointCloud[0]->points[1]) ) );
+                        correspondences->push_back( pcl::Correspondence(0,2, pcl::geometry::distance(regPointCloud[idx]->points[0],regPointCloud[0]->points[2]) ) );
+                        correspondences->push_back( pcl::Correspondence(4,0, pcl::geometry::distance(regPointCloud[idx]->points[4],regPointCloud[0]->points[0]) ) );
+                        correspondences->push_back( pcl::Correspondence(1,3, pcl::geometry::distance(regPointCloud[idx]->points[1],regPointCloud[0]->points[3]) ) );
+                        correspondences->push_back( pcl::Correspondence(2,5, pcl::geometry::distance(regPointCloud[idx]->points[2],regPointCloud[0]->points[5]) ) );
+                        correspondences->push_back( pcl::Correspondence(3,4, pcl::geometry::distance(regPointCloud[idx]->points[3],regPointCloud[0]->points[4]) ) );
                     }
 
                     if (idx==2) {
-                        correspondences->push_back( pcl::Correspondence(0,0, pcl::geometry::distance(regPointCloud[idx]->points[0],regPointCloud[0]->points[0]) ) );
-                        correspondences->push_back( pcl::Correspondence(2,1, pcl::geometry::distance(regPointCloud[idx]->points[1],regPointCloud[0]->points[2]) ) );
-                        correspondences->push_back( pcl::Correspondence(1,2, pcl::geometry::distance(regPointCloud[idx]->points[2],regPointCloud[0]->points[1]) ) );
-                        correspondences->push_back( pcl::Correspondence(3,4, pcl::geometry::distance(regPointCloud[idx]->points[3],regPointCloud[0]->points[4]) ) );
-                        correspondences->push_back( pcl::Correspondence(4,3, pcl::geometry::distance(regPointCloud[idx]->points[4],regPointCloud[0]->points[3]) ) );
-                        correspondences->push_back( pcl::Correspondence(5,5, pcl::geometry::distance(regPointCloud[idx]->points[5],regPointCloud[0]->points[5]) ) );
+                        correspondences->push_back( pcl::Correspondence(1,0, pcl::geometry::distance(regPointCloud[idx]->points[1],regPointCloud[0]->points[0]) ) );
+                        correspondences->push_back( pcl::Correspondence(5,1, pcl::geometry::distance(regPointCloud[idx]->points[5],regPointCloud[0]->points[1]) ) );
+                        correspondences->push_back( pcl::Correspondence(2,2, pcl::geometry::distance(regPointCloud[idx]->points[2],regPointCloud[0]->points[2]) ) );
+                        correspondences->push_back( pcl::Correspondence(4,3, pcl::geometry::distance(regPointCloud[idx]->points[4],regPointCloud[0]->points[4]) ) );
+                        correspondences->push_back( pcl::Correspondence(0,4, pcl::geometry::distance(regPointCloud[idx]->points[0],regPointCloud[0]->points[3]) ) );
+                        correspondences->push_back( pcl::Correspondence(3,5, pcl::geometry::distance(regPointCloud[idx]->points[3],regPointCloud[0]->points[5]) ) );
                     }
 
                     // https://machinelearning1.wordpress.com/2014/02/09/estimate-the-transformation-matrix-between-two-sets-of-points-pcl/
@@ -711,38 +725,40 @@ main (int argc, char** argv)
                 }
                 else {
                     if (idx==1) {
-//                        rigidTransformSVD << -0.755743,-0.597503,0.268033,0,
-//                                                0.189444,-0.591268,-0.783909,0,
-//                                                0.626868,-0.541657,0.56004,0,
-//                                               -0.171747,0.137125,0.141844,1;
+                        // v010
+//                        rigidTransformSVD << -0.755743, 0.189444, 0.626868,-0.171747,
+//                                             -0.597503,-0.591268,-0.541657, 0.137125,
+//                                              0.268033,-0.783909, 0.56004,  0.141844,
+//                                              0,        0,        0,        1;
 
-                        rigidTransformSVD << -0.755743, 0.189444, 0.626868,-0.171747,
-                                             -0.597503,-0.591268,-0.541657, 0.137125,
-                                              0.268033,-0.783909, 0.56004,  0.141844,
-                                              0,        0,        0,        1;
+                        // v011
+                        rigidTransformSVD << -0.773747,0.188877,0.604683,-0.161828,
+                        -0.578825,-0.598691,-0.553653,0.145535,
+                        0.257446,-0.778392,0.572562,0.142172,
+                        0,0,0,1;
+
 
                     }
                     if (idx==2) {
-//                        rigidTransformSVD << -0.654713,0.607477,0.449802,0,
-//                                             -0.182933,-0.704724,0.685492,0,
-//                                              0.733407,0.366517,0.57252,0,
-//                                             -0.202208,-0.152226,0.154354,1;
-
-                        rigidTransformSVD << -0.654713,-0.182933,0.733407,-0.202208,
-                                             0.607477,-0.704724,0.366517,-0.152226,
-                                              0.449802,0.685492,0.57252,0.154354,
-                                             0,0,0,1;
-
-
-
+                        // v010
+//                        rigidTransformSVD << -0.654713,-0.182933,0.733407,-0.202208,
+//                                             0.607477,-0.704724,0.366517,-0.152226,
+//                                              0.449802,0.685492,0.57252,0.154354,
+//                                             0,0,0,1;
+                        // v011
+                        rigidTransformSVD << -0.64718,-0.223709,0.728776,-0.198674,
+                                0.620018,-0.710675,0.332446,-0.143024,
+                                0.443551,0.667006,0.598637,0.143901,
+                                0,0,0,1;
                     }
 
                 }
 
-                std::cout << rigidTransformSVD(0)  << "," << rigidTransformSVD(1)  << "," << rigidTransformSVD(2)  << "," << rigidTransformSVD(3) << "," << std::endl
-                            << rigidTransformSVD(4)  << "," << rigidTransformSVD(5)  << "," << rigidTransformSVD(6)  << "," << rigidTransformSVD(7) << "," << std::endl
-                            << rigidTransformSVD(8)  << "," << rigidTransformSVD(9)  << "," << rigidTransformSVD(10) << "," << rigidTransformSVD(11) << "," << std::endl
-                            << rigidTransformSVD(12) << "," << rigidTransformSVD(13) << "," << rigidTransformSVD(14) << "," << rigidTransformSVD(15) << std::endl;
+                std::cout   << "MUST BE TRANSPOSED FOR HOUDINI" << std::endl
+                            << rigidTransformSVD(0)  << "," << rigidTransformSVD(4)  << "," << rigidTransformSVD(8)  << "," << rigidTransformSVD(12) << "," << std::endl
+                            << rigidTransformSVD(1)  << "," << rigidTransformSVD(5)  << "," << rigidTransformSVD(9)  << "," << rigidTransformSVD(13) << "," << std::endl
+                            << rigidTransformSVD(2)  << "," << rigidTransformSVD(6)  << "," << rigidTransformSVD(10) << "," << rigidTransformSVD(14) << "," << std::endl
+                            << rigidTransformSVD(3)  << "," << rigidTransformSVD(7)  << "," << rigidTransformSVD(11) << "," << rigidTransformSVD(15) << std::endl << std::endl;
 
                 // apply trasnsform before ICP
                 pcl::PointCloud<pcl::PointXYZRGBNormal> icpSource, icpTarget;
