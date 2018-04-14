@@ -35,6 +35,8 @@
  *
  */
 
+#include <iostream>
+#include <fstream>
 #include <sstream>
 
 #include <pcl/PCLPointCloud2.h>
@@ -752,6 +754,14 @@ main (int argc, char** argv)
                                 0,0,0,1;
                     }
 
+                }
+
+                std::stringstream filename;
+                filename << "matrix_" << idx << ".eigen";
+                std::ofstream file( filename.str().c_str() );
+                if (file.is_open())
+                {
+                  file << rigidTransformSVD;
                 }
 
                 std::cout   << "MUST BE TRANSPOSED FOR HOUDINI" << std::endl
